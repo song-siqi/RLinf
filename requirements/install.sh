@@ -139,8 +139,8 @@ install_uv() {
             else
                 wget -qO- https://astral.sh/uv/install.sh | sh
             fi
-            export PATH="$HOME/.local/bin:$PATH"
         fi
+        export PATH="$HOME/.local/bin:$PATH"
     fi
 }
 

@@ -36,8 +36,15 @@ def get_model(cfg: DictConfig, torch_dtype=None):
     # config
     config_name = getattr(cfg.openpi, "config_name", None)
     data_kwargs = getattr(cfg, "openpi_data", None)
+    override_data_assets = getattr(cfg.openpi, "override_data_assets", True)
+    load_norm_stats_from_checkpoint = getattr(
+        cfg.openpi, "load_norm_stats_from_checkpoint", True
+    )
     actor_train_config = get_openpi_config(
-        config_name, model_path=cfg.model_path, data_kwargs=data_kwargs
+        config_name,
+        model_path=cfg.model_path,
+        data_kwargs=data_kwargs,
+        override_data_assets=override_data_assets,
     )
 
     actor_model_config = actor_train_config.model
@@ -93,13 +100,20 @@ def get_model(cfg: DictConfig, torch_dtype=None):
     data_config = actor_train_config.data.create(
         actor_train_config.assets_dirs, actor_model_config
     )
-    norm_stats = None
-    if norm_stats is None:
-        # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure
-        # that the policy is using the same normalization stats as the original training process.
-        if data_config.asset_id is None:
-            raise ValueError("Asset id is required to load norm stats.")
+    if data_config.asset_id is None:
+        raise ValueError("Asset id is required to load norm stats.")
+    if load_norm_stats_from_checkpoint:
+        # Default inference/RL path: use the stats packaged with the model checkpoint.
         norm_stats = _checkpoints.load_norm_stats(checkpoint_dir, data_config.asset_id)
+    else:
+        # SFT-from-base path: weights come from the base checkpoint, while stats
+        # come from the target dataset config assets.
+        norm_stats = data_config.norm_stats
+        if norm_stats is None:
+            raise FileNotFoundError(
+                "Norm stats were not found in the data config assets. Run "
+                "toolkits/lerobot/calculate_norm_stats.py for this config first."
+            )
     # wrappers
     repack_transforms = transforms.Group()
     default_prompt = None

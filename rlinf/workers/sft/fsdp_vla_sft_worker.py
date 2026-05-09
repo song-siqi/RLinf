@@ -40,6 +40,9 @@ class FSDPVlaSftWorker(FSDPSftWorker):
                 model_path=self.cfg.actor.model.model_path,
                 batch_size=self.cfg.actor.micro_batch_size * self._world_size,
                 data_kwargs=getattr(self.cfg.actor, "openpi_data", None),
+                override_data_assets=getattr(
+                    self.cfg.actor.model.openpi, "override_data_assets", True
+                ),
             )
             data_loader = openpi_data_loader.create_data_loader(
                 config, framework="pytorch", shuffle=True

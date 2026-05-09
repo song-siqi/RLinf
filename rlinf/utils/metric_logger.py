@@ -85,6 +85,7 @@ class MetricLogger:
                 settings = wandb.Settings(https_proxy=self.wandb_proxy)
             wandb.init(
                 project=self.project_name,
+                entity="striding-algo",
                 name=experiment_name,
                 config=self.config,
                 settings=settings,

@@ -416,6 +416,24 @@ _CONFIGS = [
         ),
         pytorch_weight_path="checkpoints/torch/pi0_base",
     ),
+    TrainConfig(
+        name="pi0_s2m",
+        model=pi0_config.Pi0Config(action_horizon=30),
+        data=LeRobotX2RobotDataConfig(
+            repo_id=(
+                "beijing_guqiuyi_20260317_pm_tele_s2m,"
+                "beijing_guqiuyi_20260318_pm_tele_s2m,"
+                "beijing_guqiuyi_20260420_pm_tele_s2m"
+            ),
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(assets_dir="checkpoints/torch/pi0_s2m/assets"),
+            action_dim=14,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "checkpoints/jax/pi0_base/params"
+        ),
+        pytorch_weight_path="checkpoints/torch/pi0_base",
+    ),
 ]
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
@@ -423,11 +441,14 @@ if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
 _CONFIGS_DICT = {config.name: config for config in _CONFIGS}
 
 
-def _override_with_model_path(config: TrainConfig, model_path: str) -> TrainConfig:
+def _override_with_model_path(
+    config: TrainConfig, model_path: str, *, override_data_assets: bool = True
+) -> TrainConfig:
     """Return a copy of the config with assets/weight paths set from model_path."""
     data_config = config.data
     if (
-        dataclasses.is_dataclass(data_config)
+        override_data_assets
+        and dataclasses.is_dataclass(data_config)
         and hasattr(data_config, "assets")
         and dataclasses.is_dataclass(data_config.assets)
     ):
@@ -461,6 +482,7 @@ def get_openpi_config(
     batch_size: Optional[int] = None,
     repo_id: Optional[str] = None,
     data_kwargs: Optional[dict] = None,
+    override_data_assets: bool = True,
 ) -> TrainConfig:
     """Get a config by name.
 
@@ -481,7 +503,9 @@ def get_openpi_config(
 
     config = _CONFIGS_DICT[config_name]
     if model_path is not None:
-        config = _override_with_model_path(config, model_path)
+        config = _override_with_model_path(
+            config, model_path, override_data_assets=override_data_assets
+        )
     if data_kwargs is not None:
         config = _override_with_data_kwargs(config, data_kwargs)
     if batch_size is not None:

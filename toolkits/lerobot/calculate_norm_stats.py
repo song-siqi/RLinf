@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
+from pathlib import Path
 
 import numpy as np
 import openpi.models.model as _model
@@ -33,6 +35,84 @@ class RemoveStrings(transforms.DataTransformFn):
             for k, v in x.items()
             if not np.issubdtype(np.asarray(v).dtype, np.str_)
         }
+
+
+def _split_repo_ids(repo_id: str) -> list[str]:
+    return [item.strip() for item in repo_id.split(",") if item.strip()]
+
+
+def _read_episode_indices(dataset_root: Path) -> list[int]:
+    episodes_path = dataset_root / "meta" / "episodes.jsonl"
+    indices = []
+    with episodes_path.open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                indices.append(int(json.loads(line)["episode_index"]))
+    return indices
+
+
+def compute_local_lerobot_stats(
+    repo_id: str, keys: list[str], target_dim: int | None = None
+):
+    """Compute state/action stats directly from local parquet files.
+
+    Norm stats do not need images, so avoid instantiating LeRobotDataset here:
+    its __getitem__ decodes videos and can fail when FFmpeg/torchcodec is not
+    available in the environment.
+    """
+    import pyarrow.parquet as pq
+
+    hf_lerobot_home = Path(os.environ["HF_LEROBOT_HOME"])
+    repo_ids = _split_repo_ids(repo_id)
+    stats = {key: normalize.RunningStats() for key in keys}
+    found_any = False
+
+    for dataset_name in repo_ids:
+        dataset_root = hf_lerobot_home / dataset_name
+        info_path = dataset_root / "meta" / "info.json"
+        if not info_path.exists():
+            raise FileNotFoundError(
+                f"LeRobot metadata not found: {info_path}. "
+                "Check HF_LEROBOT_HOME and --repo-id."
+            )
+
+        with info_path.open() as f:
+            info = json.load(f)
+        missing = [key for key in keys if key not in info.get("features", {})]
+        if missing:
+            raise KeyError(
+                f"Dataset {dataset_name!r} is missing required features: {missing}."
+            )
+
+        data_path_template = info["data_path"]
+        chunks_size = int(info.get("chunks_size", 1000))
+        episode_indices = _read_episode_indices(dataset_root)
+
+        for episode_index in tqdm.tqdm(
+            episode_indices, desc=f"Reading {dataset_name}", leave=False
+        ):
+            episode_chunk = int(episode_index) // chunks_size
+            parquet_path = dataset_root / data_path_template.format(
+                episode_chunk=episode_chunk,
+                episode_index=int(episode_index),
+            )
+            table = pq.read_table(parquet_path, columns=keys)
+            for key in keys:
+                values = np.asarray(table[key].to_pylist(), dtype=np.float32)
+                if target_dim is not None and key in {"state", "actions"}:
+                    values = transforms.pad_to_dim(values, target_dim)
+                stats[key].update(values)
+            found_any = True
+
+    if not found_any:
+        raise ValueError(f"No frames found for repo_id={repo_id!r}.")
+    return {key: stats.get_statistics() for key, stats in stats.items()}
+
+
+def _stats_output_path(config, data_config: DataConfig) -> Path:
+    assets_dir = config.data.assets.assets_dir or config.assets_dirs
+    return Path(assets_dir) / (data_config.asset_id or data_config.repo_id)
 
 
 def create_torch_dataloader(
@@ -120,29 +200,22 @@ def main(
     )
     data_config = config.data.create(config.assets_dirs, config.model)
 
+    keys = ["state", "actions"]
     if data_config.rlds_data_dir is not None:
         data_loader, num_batches = create_rlds_dataloader(
             data_config, config.model.action_horizon, config.batch_size
         )
+        stats = {key: normalize.RunningStats() for key in keys}
+        for batch in tqdm.tqdm(data_loader, total=num_batches, desc="Computing stats"):
+            for key in keys:
+                stats[key].update(np.asarray(batch[key]))
+        norm_stats = {key: stats.get_statistics() for key, stats in stats.items()}
     else:
-        data_loader, num_batches = create_torch_dataloader(
-            data_config,
-            config.model.action_horizon,
-            config.batch_size,
-            config.model,
-            config.num_workers,
+        norm_stats = compute_local_lerobot_stats(
+            data_config.repo_id, keys, target_dim=config.model.action_dim
         )
 
-    keys = ["state", "actions"]
-    stats = {key: normalize.RunningStats() for key in keys}
-
-    for batch in tqdm.tqdm(data_loader, total=num_batches, desc="Computing stats"):
-        for key in keys:
-            stats[key].update(np.asarray(batch[key]))
-
-    norm_stats = {key: stats.get_statistics() for key, stats in stats.items()}
-
-    output_path = config.assets_dirs / data_config.repo_id
+    output_path = _stats_output_path(config, data_config)
     print(f"Writing stats to: {output_path}")
     normalize.save(output_path, norm_stats)
 
