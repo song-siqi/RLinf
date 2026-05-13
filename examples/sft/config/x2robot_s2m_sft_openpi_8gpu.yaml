@@ -63,9 +63,9 @@ actor:
     adam_beta1: 0.9
     adam_beta2: 0.95
     adam_eps: 1.0e-08
-    weight_decay: 0.01
+    weight_decay: 1.0e-10
     clip_grad: 1.0
-    warmup_style: "cosine"
+    lr_scheduler: "cosine"
     lr_warmup_steps: 1000
     total_training_steps: ${runner.max_steps}
 
