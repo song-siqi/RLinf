@@ -417,22 +417,16 @@ _CONFIGS = [
         pytorch_weight_path="checkpoints/torch/pi0_base",
     ),
     TrainConfig(
-        name="pi0_s2m",
+        name="fold_towel_pi0_s2m",
         model=pi0_config.Pi0Config(action_horizon=30),
         data=LeRobotX2RobotDataConfig(
-            repo_id=(
-                "beijing_guqiuyi_20260317_pm_tele_s2m,"
-                "beijing_guqiuyi_20260318_pm_tele_s2m,"
-                "beijing_guqiuyi_20260420_pm_tele_s2m"
-            ),
+            repo_id="beijing_guqiuyi_20260317_pm_tele_s2m,beijing_guqiuyi_20260318_pm_tele_s2m,beijing_guqiuyi_20260420_pm_tele_s2m", # Multiple datasets separated by comma
             base_config=DataConfig(prompt_from_task=True),
-            assets=AssetsConfig(assets_dir="checkpoints/torch/pi0_s2m/assets"),
+            assets=AssetsConfig(assets_dir="checkpoints/torch/fold_towel_pi0_s2m/assets"),
             action_dim=14,
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader(
-            "checkpoints/jax/pi0_base/params"
-        ),
-        pytorch_weight_path="checkpoints/torch/pi0_base",
+        weight_loader=weight_loaders.CheckpointWeightLoader("/mnt/public/datasets/pretrained-checkpoints/openpi-assets/checkpoints/pi0_base/params"),
+        pytorch_weight_path="/mnt/public/datasets/pretrained-checkpoints/pi0_base_pytorch",
     ),
 ]
 

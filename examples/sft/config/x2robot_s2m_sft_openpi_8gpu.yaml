@@ -21,13 +21,13 @@ runner:
   logger:
     log_path: "../results"
     project_name: rlinf
-    experiment_name: "x2robot_s2m_sft_openpi_8gpu"
+    experiment_name: "fold_towel_s2m_sft_openpi_8gpu"
     logger_backends: ["wandb"]
 
   max_epochs: -1
   max_steps: 30000
   val_check_interval: -1
-  save_interval: 1000
+  save_interval: 3000
 
 data:
   train_data_paths: "/mnt/public/songsiqi/data/lerobot"
@@ -44,12 +44,12 @@ actor:
 
   model:
     precision: null
-    model_path: "/mnt/public/models/pytorch_models/pi0_base_pytorch"
+    model_path: "/mnt/public/datasets/pretrained-checkpoints/pi0_base_pytorch"
     num_action_chunks: 30
     action_dim: 14
     add_value_head: False
     openpi:
-      config_name: "pi0_s2m"
+      config_name: "fold_towel_pi0_s2m"
       detach_critic_input: True
       num_images_in_input: 3
       action_chunk: ${actor.model.num_action_chunks}
